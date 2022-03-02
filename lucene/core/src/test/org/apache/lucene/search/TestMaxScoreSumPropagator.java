@@ -89,6 +89,7 @@ public class TestMaxScoreSumPropagator extends LuceneTestCase {
     }
   }
 
+  /*
   public void test0Clause() throws IOException {
     MaxScoreSumPropagator p = new MaxScoreSumPropagator(Collections.emptyList());
     p.setMinCompetitiveScore(0f); // no exception
@@ -228,5 +229,28 @@ public class TestMaxScoreSumPropagator extends LuceneTestCase {
           "scoreSum=" + scoreSum + ", minCompetitiveScore=" + minCompetitiveScore,
           (float) scoreSum <= minCompetitiveScore);
     }
+  }
+  */
+
+  /*
+    In https://issues.apache.org/jira/browse/LUCENE-10428 we have observed an issue in production
+    causing an infinite loop in MaxScoreSumPropagator.getMinCompetitiveScore. This is likely
+    caused by calling code that is breaking the assumptions made by MaxScoreSumPropagator, 
+    e.g. a query that produces negative or NaN scores. This test reproduces such an assumption
+    and expects getMinCompetitiveScore to abort at more than 2 iterations.
+
+    See https://github.com/apache/lucene/pull/711.
+  */
+  public void testGetMinCompetitiveScore() throws Exception {   
+
+    List<FakeScorer> scorers = new ArrayList<>();
+    scorers.add(new FakeScorer(-0.16903716f));
+    scorers.add(new FakeScorer(0.62573546f));
+    scorers.add(new FakeScorer(-0.64014715f));
+
+    float minScoreSum = 0.31314075f;
+    MaxScoreSumPropagator p = new MaxScoreSumPropagator(scorers);
+    Throwable exception = assertThrows(IllegalStateException.class, () -> p.setMinCompetitiveScore(minScoreSum));
+    assertEquals("Could not compute a minimum score for minScore=1.1223251, minScoreSum=0.31314072, sumOfOtherMaxScores=-0.8091843128204346, numClauses=3", exception.getMessage());
   }
 }
